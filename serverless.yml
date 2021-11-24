@@ -1,16 +1,17 @@
-service:
-  name: ignite-certificate
+service: ignite-certificate
 
 plugins:
   - serverless-offline
   - serverless-webpack
   - serverless-dynamodb-local
+  - serverless-dotenv-plugin
+  - serverless-iam-roles-per-function
 
 custom:
   webpack:
     webpackConfig: ./webpack.config.js
     includeModules: true
-  dynamodb:
+  dynamoDB:
     stages:
       - dev
       - local
@@ -18,20 +19,61 @@ custom:
       port: 8000
       inMemory: true
       migrate: true
+  dotenv:
+    path: ".env"
+    include:
+      - AWS_BUCKET
+      - AWS_BUCKET_REGION
+      - AWS_BUCKET_URL
 
 provider:
   name: aws
   runtime: nodejs14.x
   region: sa-east-1
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - dynamodb:*
+          Resource: "*"
+        - Effect: Allow
+          Action:
+            - s3:*
+          Resource: "*"
 
 functions:
-  hello:
-    handler: src/functions/hello.handle
+  generateCertificate:
+    handler: src/functions/generateCertificate.handle
     events:
       - http:
-          path: /hello
+          path: /generateCertificate
+          method: POST
+          cors: true
+    iam:
+      role:
+        statements:
+          - Effect: Allow
+            Action:
+              - dynamodb:Query
+              - dynamodb:PutItem
+            Resource: 
+              - "arn:aws:dynamodb:${self.provider.region}:*:table/users_certificates"
+  verifyCertificate:
+    handler: src/functions/verifyCertificate.handle
+    events:
+      - http:
+          path: /verifyCertificate/{id}
           method: GET
           cors: true
+    iam:
+      role:
+        statements:
+          - Effect: Allow
+            Action:
+              - dynamodb:Query
+            Resource: 
+              - "arn:aws:dynamodb:${self.provider.region}:*:table/users_certificates"
 
 resources:
   Resources:
